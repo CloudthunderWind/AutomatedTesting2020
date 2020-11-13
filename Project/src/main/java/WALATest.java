@@ -31,16 +31,15 @@ public class WALATest {
     private ArrayList<String> classQueue = new ArrayList<String>();
     private ArrayList<String> methodQueue = new ArrayList<String>();
 
+    /**
+     * 启动pdf生成程序
+     */
     private void boot() throws IOException, ClassHierarchyException, InvalidClassFileException, CancelException {
         File exFile = new FileProvider().getFile("exclusion.txt");
         AnalysisScope scope = AnalysisScopeReader.readJavaScope("scope.txt", exFile, ClassLoader.getSystemClassLoader());
-        this.targetPath = "E:/魔鬼的力量/大三上课程/自动化测试/大作业/WALA/ClassicAutomatedTesting/0-CMD/target/";
-        this.getProjectName();
-        scope.addClassFileToScope(ClassLoaderReference.Application, new File(this.targetPath + "classes/net/mooctest/CMD.class"));
-        scope.addClassFileToScope(ClassLoaderReference.Application, new File(this.targetPath + "test-classes/net/mooctest/CMDTest.class"));
-        scope.addClassFileToScope(ClassLoaderReference.Application, new File(this.targetPath + "test-classes/net/mooctest/CMDTest1.class"));
-        scope.addClassFileToScope(ClassLoaderReference.Application, new File(this.targetPath + "test-classes/net/mooctest/CMDTest2.class"));
-        scope.addClassFileToScope(ClassLoaderReference.Application, new File(this.targetPath + "test-classes/net/mooctest/CMDTest3.class"));
+        this.getParams();
+        this.readClasses(scope, new File(this.targetPath + "classes"));
+        this.readClasses(scope, new File(this.targetPath + "test-classes"));
 
         ClassHierarchy cha = ClassHierarchyFactory.makeWithRoot(scope);
         Iterable<Entrypoint> entryPoints = new AllApplicationEntrypoints(scope, cha);
@@ -50,60 +49,92 @@ public class WALATest {
         this.cg = builder.makeCallGraph(option);
         for (int i = 0; i < cg.getNumberOfNodes(); i++) {
             CGNode node = cg.getNode(i);
-            if (this.isShrikeBTMethod(node)) {
-                System.out.println("---");
-            }
+            this.isShrikeBTMethod(node);
         }
         this.creatDotByCallGraph();
     }
 
-    private boolean isShrikeBTMethod(CGNode node) {
+    /**
+     * 判断一个方法是否是ShrikeBTMethod,如果是则遍历其调用者
+     *
+     * @param node 调用图节点
+     */
+    private void isShrikeBTMethod(CGNode node) {
         if (node.getMethod() instanceof ShrikeBTMethod) {
             ShrikeBTMethod method = (ShrikeBTMethod) node.getMethod();
             if ("Application".equals(method.getDeclaringClass().getClassLoader().toString())) {
                 String classInnerName = method.getDeclaringClass().getName().toString();
                 String signature = method.getSignature();
                 System.out.println(classInnerName + " " + signature);
-                this.printPredNodes(classInnerName, cg.getPredNodes(node), 'c');
-                this.printPredNodes(signature, cg.getPredNodes(node), 'm');
-            }
-            return true;
-        }
-        return false;
-    }
-
-    private void printPredNodes(String faName, Iterator<CGNode> nodes, char mode) {
-        while (nodes.hasNext()) {
-            CGNode node = nodes.next();
-            if (this.isShrikeBTMethod(node)) {
-                ShrikeBTMethod method = (ShrikeBTMethod) node.getMethod();
-                if (mode == 'c') {
-                    String classInnerName = method.getDeclaringClass().getName().toString();
-                    String call = "\"" + faName + "\" -> \"" + classInnerName + "\";";
-                    if (this.classGranularity.add(call)) {
-                        this.classQueue.add(call);
-                    }
-                } else if (mode == 'm') {
-                    String signature = method.getSignature();
-                    String call = "\"" + faName + "\" -> \"" + signature + "\";";
-                    if (this.methodGranularity.add(call)) {
-                        this.methodQueue.add(call);
+                Iterator<CGNode> nodes = cg.getPredNodes(node);
+                String call;
+                while (nodes.hasNext()) {
+                    CGNode n = nodes.next();
+                    if (n.getMethod() instanceof ShrikeBTMethod) {
+                        ShrikeBTMethod m = (ShrikeBTMethod) n.getMethod();
+                        if ("Application".equals(m.getDeclaringClass().getClassLoader().toString())) {
+                            String callerClass = m.getDeclaringClass().getName().toString();
+                            call = "\"" + classInnerName + "\" -> \"" + callerClass + "\";";
+                            if (this.classGranularity.add(call)) {
+                                this.classQueue.add(call);
+                            }
+                            String callerMethod = m.getSignature();
+                            call = "\"" + signature + "\" -> \"" + callerMethod + "\";";
+                            if (this.methodGranularity.add(call)) {
+                                this.methodQueue.add(call);
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    private void getParams() {
 
+    /**
+     * 从命令行读取参数
+     */
+    private void getParams() {
+        this.targetPath = "E:/魔鬼的力量/大三上课程/自动化测试/大作业/WALA/ClassicAutomatedTesting/5-MoreTriangle/target/";
+        this.getProjectName();
     }
 
+
+    /**
+     * 从target路径中获取项目的名字
+     */
     private void getProjectName() {
         String[] path = this.targetPath.split("/");
         this.projectName = path[path.length - 2].substring(2);
     }
 
-    private void creatDotByCallGraph() throws FileNotFoundException {
+    /**
+     * 遍历文件夹下所有子目录中的.class文件并添加到scope中
+     *
+     * @param scope      分析域
+     * @param classesDir 类目录
+     * @throws InvalidClassFileException 无效类文件异常
+     */
+    private void readClasses(AnalysisScope scope, File classesDir) throws InvalidClassFileException {
+        File[] classes = classesDir.listFiles();
+        if (classes == null) {
+            return;
+        }
+        for (File clazz : classes) {
+            if (clazz.isDirectory()) {
+                this.readClasses(scope, clazz);
+            } else if (clazz.isFile()) {
+                if (clazz.getName().matches(".*\\.class")) {
+                    scope.addClassFileToScope(ClassLoaderReference.Application, clazz);
+                }
+            }
+        }
+    }
+
+    /**
+     * 从类级队列和方法级队列中生成Dot文件
+     */
+    private void creatDotByCallGraph() {
         try {
             File curDir = new File(".");
             String abPath = curDir.getAbsolutePath();
@@ -129,9 +160,14 @@ public class WALATest {
         this.clear();
     }
 
+    /**
+     * 清空所有队列
+     */
     private void clear() {
         this.classGranularity.clear();
+        this.classQueue.clear();
         this.methodGranularity.clear();
+        this.methodQueue.clear();
     }
 
     public static void main(String[] args) {
