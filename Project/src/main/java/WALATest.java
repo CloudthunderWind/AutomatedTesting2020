@@ -14,9 +14,7 @@ import com.ibm.wala.util.config.AnalysisScopeReader;
 import com.ibm.wala.util.io.FileProvider;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.*;
 
 public class WALATest {
     // 测试的三个参数
@@ -72,7 +70,7 @@ public class WALATest {
                 String signature = method.getSignature();
                 //执行用例选择方法
                 this.select(node, classInnerName, signature);
-
+                //执行Dot选择方法
 //                Iterator<CGNode> nodes = originCg.getPredNodes(node);
 //                while (nodes.hasNext()) {
 //                    //遍历前驱节点，即调用者
@@ -198,7 +196,7 @@ public class WALATest {
                 //当被调用节点与changeInfo的行对应时，查找该生产代码的所有调用者
                 ArrayList<String[]> calleeList = new ArrayList<String[]>();
                 calleeList.add(selectors);
-                this.findCaller(calleeList, callee, classInnerName);
+                this.findCaller(calleeList, callee);
             }
         }
 
@@ -208,38 +206,63 @@ public class WALATest {
      * 查找一个change的调用者
      *
      * @param calleeList change链条中的元素
-     * @param callee     目前要查找的被调用者
+     * @param rootCallee 目前要查找的被调用者
      */
-    private void findCaller(ArrayList<String[]> calleeList, CGNode callee, String calleeName) {
-        Iterator<CGNode> callers = this.originCg.getPredNodes(callee);
-        while (callers.hasNext()) {
-            CGNode caller = callers.next();
-
-            if (caller.getMethod() instanceof ShrikeBTMethod) {
-                String callerClass = caller.getMethod().getDeclaringClass().getName().toString();
-                String callerMethod = caller.getMethod().getSignature();
-                if ("Application".equals(caller.getMethod().getDeclaringClass().getClassLoader().toString())) {
-                    String[] callerFeature = new String[]{callerClass, callerMethod};
-                    if (callerClass.matches(calleeName + ".*Test.*")) {
-                        //当前调用者属于某个测试类时，在队列里添加一条筛选信息
-                        if (this.testGranularity.equals("-c")) {
-                            if (this.classGranularity.add(callerClass + " " + callerMethod)) {
-                                this.classQueue.add(callerClass + " " + callerMethod);
-                            }
-                        } else if (this.testGranularity.equals("-m")) {
-                            if (this.methodGranularity.add(callerClass + " " + callerMethod)) {
-                                this.methodQueue.add(callerClass + " " + callerMethod);
+    private void findCaller(ArrayList<String[]> calleeList, CGNode rootCallee) {
+        LinkedList<CGNode> calleeQueue = new LinkedList<CGNode>();
+        calleeQueue.add(rootCallee);
+        while (!calleeQueue.isEmpty()) {
+            CGNode callee = calleeQueue.poll();
+            Iterator<CGNode> callers = this.originCg.getPredNodes(callee);
+            while (callers.hasNext()) {
+                CGNode caller = callers.next();
+                if (caller.getMethod() instanceof ShrikeBTMethod) {
+                    ShrikeBTMethod method = (ShrikeBTMethod) caller.getMethod();
+                    String callerClass = method.getDeclaringClass().getName().toString();
+                    String callerMethod = method.getSignature();
+                    if ("Application".equals(method.getDeclaringClass().getClassLoader().toString())) {
+                        String[] callerFeature = new String[]{callerClass, callerMethod};
+                        if (this.isTest(method)) {
+                            //当前调用者属于某个测试类时，在队列里添加一条筛选信息
+                            if (this.testGranularity.equals("-c")) {
+                                if (this.classGranularity.add(callerClass + " " + callerMethod)) {
+                                    this.classQueue.add(callerClass + " " + callerMethod);
+                                }
+                            } else if (this.testGranularity.equals("-m")) {
+                                if (this.methodGranularity.add(callerClass + " " + callerMethod)) {
+                                    this.methodQueue.add(callerClass + " " + callerMethod);
+                                }
                             }
                         }
-                    }
-                    if (!calleeList.contains(callerFeature)) {
-                        //用一个ArrayList储存该调用链条的内容，当不存在递归情况时，递归查找调用点
-                        calleeList.add(callerFeature);
-                        this.findCaller(calleeList, caller, calleeName);
+                        if (!this.containsStrings(calleeList, callerFeature)) {
+                            //用一个ArrayList储存该调用链条的内容，当不存在递归情况时，查找调用点
+                            calleeList.add(callerFeature);
+                            calleeQueue.add(caller);
+                        }
                     }
                 }
             }
         }
+    }
+
+    private boolean isTest(ShrikeBTMethod method) {
+        boolean needStore = false;
+        for (Object a : method.getAnnotations()) {
+            if (a.toString().matches(".*Test.*")) {
+                needStore = true;
+                break;
+            }
+        }
+        return needStore;
+    }
+
+    private boolean containsStrings(ArrayList<String[]> calleeList, String[] callerFeature) {
+        for (String[] calleeFeature : calleeList) {
+            if (calleeFeature[0].equals(callerFeature[0]) && calleeFeature[1].equals(callerFeature[1])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
