@@ -6,3 +6,4 @@ Lnet/mooctest/BinaryHeapOtherTest net.mooctest.BinaryHeapOtherTest.test()V
 Lnet/mooctest/BinaryHeapForDeleteMinTest net.mooctest.BinaryHeapForDeleteMinTest.testfordeleteMin()V
 Lnet/mooctest/BinaryHeapForFindMinTest net.mooctest.BinaryHeapForFindMinTest.testforfindmin3()V
 Lnet/mooctest/BinaryHeapForFindMinTest net.mooctest.BinaryHeapForFindMinTest.testforfindmin()V
+

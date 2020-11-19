@@ -22,7 +22,7 @@ public class WALATest {
     private String targetPath;
     private ArrayList<String[]> changeInfo = new ArrayList<String[]>();
 
-    private CallGraph originCg;
+    private CallGraph cg;
     private String projectName;
     private HashSet<String> classGranularity = new HashSet<String>();
     private HashSet<String> methodGranularity = new HashSet<String>();
@@ -35,8 +35,10 @@ public class WALATest {
      * @param args 命令行参数
      */
     void boot(String[] args) throws IOException, ClassHierarchyException, InvalidClassFileException, CancelException {
+        //构建分析域
         File exFile = new FileProvider().getFile("exclusion.txt");
         AnalysisScope scope = AnalysisScopeReader.readJavaScope("scope.txt", exFile, ClassLoader.getSystemClassLoader());
+        //this.getFakeParams();
         this.getParams(args);
         this.readClasses(scope, new File(this.targetPath + "classes"));
         this.readClasses(scope, new File(this.targetPath + "test-classes"));
@@ -46,9 +48,10 @@ public class WALATest {
 
         AnalysisOptions option = new AnalysisOptions(scope, entryPoints);
         SSAPropagationCallGraphBuilder builder = Util.makeZeroCFABuilder(Language.JAVA, option, new AnalysisCacheImpl(), cha, scope);
-        this.originCg = builder.makeCallGraph(option);
-        for (int i = 0; i < originCg.getNumberOfNodes(); i++) {
-            CGNode node = originCg.getNode(i);
+        this.cg = builder.makeCallGraph(option);
+        //遍历调用图节点，并找出所需的ShrinkBTMethod的调用者集合
+        for (int i = 0; i < cg.getNumberOfNodes(); i++) {
+            CGNode node = cg.getNode(i);
             this.addShrikeBTMethodCaller(node);
         }
         //this.creatDot();
@@ -71,22 +74,10 @@ public class WALATest {
                 //执行用例选择方法
                 this.select(node, classInnerName, signature);
                 //执行Dot选择方法
-//                Iterator<CGNode> nodes = originCg.getPredNodes(node);
-//                while (nodes.hasNext()) {
-//                    //遍历前驱节点，即调用者
-//                    CGNode n = nodes.next();
-//                    if (n.getMethod() instanceof ShrikeBTMethod) {
-//                        ShrikeBTMethod m = (ShrikeBTMethod) n.getMethod();
-//                        if ("Application".equals(m.getDeclaringClass().getClassLoader().toString())) {
-//                            //将表示call的字符串存入队列，以构建Dot
-//                            this.dotPreDeal(m, classInnerName, signature);
-//                        }
-//                    }
-//                }
+                //this.selectDot(node, classInnerName, signature);
             }
         }
     }
-
 
     /**
      * 加载命令行参数
@@ -115,6 +106,14 @@ public class WALATest {
         }
     }
 
+    /**
+     * 测试程序：加载伪命令行参数
+     */
+    private void getFakeParams() {
+        this.testGranularity = "-c";
+        this.targetPath = "Data/ClassicAutomatedTesting/5-MoreTriangle/target/";
+        this.getProjectName();
+    }
 
     /**
      * 从target路径中获取项目的名字
@@ -147,6 +146,35 @@ public class WALATest {
         }
     }
 
+    /**
+     * 选择构建Dot需要的节点
+     *
+     * @param callee         被调用节点
+     * @param classInnerName 类名
+     * @param signature      方法名
+     */
+    private void selectDot(CGNode callee, String classInnerName, String signature) {
+        Iterator<CGNode> nodes = cg.getPredNodes(callee);
+        while (nodes.hasNext()) {
+            //遍历前驱节点，即调用者
+            CGNode n = nodes.next();
+            if (n.getMethod() instanceof ShrikeBTMethod) {
+                ShrikeBTMethod m = (ShrikeBTMethod) n.getMethod();
+                if ("Application".equals(m.getDeclaringClass().getClassLoader().toString())) {
+                    //将表示call的字符串存入队列，以构建Dot
+                    this.dotPreDeal(m, classInnerName, signature);
+                }
+            }
+        }
+    }
+
+    /**
+     * 生成一个表示方法调用的字符串并存进序列
+     *
+     * @param m              方法节点
+     * @param classInnerName 类名
+     * @param signature      方法名
+     */
     private void dotPreDeal(ShrikeBTMethod m, String classInnerName, String signature) {
         String call;
         String callerClass = m.getDeclaringClass().getName().toString();
@@ -188,6 +216,10 @@ public class WALATest {
 
     /**
      * 从类级队列和方法级队列中生成选择表单
+     *
+     * @param callee         被调用节点
+     * @param classInnerName 类名
+     * @param signature      方法名
      */
     private void select(CGNode callee, String classInnerName, String signature) {
         for (String[] selectors : this.changeInfo) {
@@ -199,7 +231,6 @@ public class WALATest {
                 this.findCaller(calleeList, callee);
             }
         }
-
     }
 
     /**
@@ -213,7 +244,7 @@ public class WALATest {
         calleeQueue.add(rootCallee);
         while (!calleeQueue.isEmpty()) {
             CGNode callee = calleeQueue.poll();
-            Iterator<CGNode> callers = this.originCg.getPredNodes(callee);
+            Iterator<CGNode> callers = this.cg.getPredNodes(callee);
             while (callers.hasNext()) {
                 CGNode caller = callers.next();
                 if (caller.getMethod() instanceof ShrikeBTMethod) {
@@ -227,6 +258,7 @@ public class WALATest {
                             if (this.testGranularity.equals("-c")) {
                                 if (this.classGranularity.add(callerClass + " " + callerMethod)) {
                                     this.classQueue.add(callerClass + " " + callerMethod);
+                                    this.findClassCaller(callerClass);
                                 }
                             } else if (this.testGranularity.equals("-m")) {
                                 if (this.methodGranularity.add(callerClass + " " + callerMethod)) {
@@ -245,6 +277,11 @@ public class WALATest {
         }
     }
 
+    /**
+     * 判断一个方法是否是测试方法
+     * @param method 方法
+     * @return 是否是测试方法
+     */
     private boolean isTest(ShrikeBTMethod method) {
         boolean needStore = false;
         for (Object a : method.getAnnotations()) {
@@ -256,6 +293,12 @@ public class WALATest {
         return needStore;
     }
 
+    /**
+     * 判断列表中是否有一个字符串数组
+     * @param calleeList 被调用者列表
+     * @param callerFeature 被调用者的类名和方法名数组
+     * @return 是否包含
+     */
     private boolean containsStrings(ArrayList<String[]> calleeList, String[] callerFeature) {
         for (String[] calleeFeature : calleeList) {
             if (calleeFeature[0].equals(callerFeature[0]) && calleeFeature[1].equals(callerFeature[1])) {
@@ -263,6 +306,25 @@ public class WALATest {
             }
         }
         return false;
+    }
+
+    /**
+     * 找出某个类下的所有方法
+     * @param className 类名
+     */
+    private void findClassCaller(String className) {
+        for (CGNode node : this.cg) {
+            if (node.getMethod() instanceof ShrikeBTMethod) {
+                ShrikeBTMethod nodeMethod = (ShrikeBTMethod) node.getMethod();
+                if (this.isTest(nodeMethod)) {
+                    if (nodeMethod.getDeclaringClass().getName().toString().equals(className)) {
+                        if (this.classGranularity.add(className + " " + nodeMethod.getSignature())) {
+                            this.classQueue.add(className + " " + nodeMethod.getSignature());
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**

@@ -21,8 +21,7 @@
      // 2.生成进入点
      Iterable<Entrypoint> eps = new AllApplicationEntrypoints(scope, cha);
      // 3.利用CHA算法构建调用图
-     // CallGraph cg = new CHACallGraph(cha); // 这句出错了，请注意。正确用法见下一行
-     CHACallGraph cg = new CHACallGraph(cha);
+     CallGraph cg = new CHACallGraph(cha);
      cg.init(eps);
      // 4.遍历cg中所有的节点
      for(CGNode node: cg) {

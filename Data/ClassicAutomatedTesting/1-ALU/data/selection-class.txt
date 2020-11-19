@@ -49,3 +49,4 @@ Lnet/mooctest/ALUOtherTest1 net.mooctest.ALUOtherTest1.test41()V
 Lnet/mooctest/ALUOtherTest1 net.mooctest.ALUOtherTest1.test42()V
 Lnet/mooctest/ALUFloatTest net.mooctest.ALUFloatTest.test24()V
 Lnet/mooctest/ALUGateTest net.mooctest.ALUGateTest.test32()V
+

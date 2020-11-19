@@ -13,3 +13,4 @@ Lnet/mooctest/BinaryHeapOtherTest net.mooctest.BinaryHeapOtherTest.test2()V
 Lnet/mooctest/BinaryHeapForFindMinTest net.mooctest.BinaryHeapForFindMinTest.testforfindmin3()V
 Lnet/mooctest/BinaryHeapForFindMinTest net.mooctest.BinaryHeapForFindMinTest.testforfindmin()V
 Lnet/mooctest/BinaryHeapOtherTest net.mooctest.BinaryHeapOtherTest.test8()V
+

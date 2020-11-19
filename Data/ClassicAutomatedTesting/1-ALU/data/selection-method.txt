@@ -11,3 +11,4 @@ Lnet/mooctest/ALUFloatTest net.mooctest.ALUFloatTest.test57()V
 Lnet/mooctest/ALUOtherTest2 net.mooctest.ALUOtherTest2.test16()V
 Lnet/mooctest/ALUOtherTest2 net.mooctest.ALUOtherTest2.test15()V
 Lnet/mooctest/ALUFloatTest net.mooctest.ALUFloatTest.test24()V
+
